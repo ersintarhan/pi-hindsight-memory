@@ -34,6 +34,7 @@ interface RecallResult {
 }
 
 const CONFIG_PATH = join(getAgentDir(), "hindsight-memory.json");
+const RECALL_TYPE = "hindsight-memory";
 
 /** Git repo name (worktree-safe via common dir), else cwd basename. Matches epimetheus' project tag. */
 export function projectName(cwd: string): string {
@@ -166,7 +167,8 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	// ponytail: in-memory flag, so a resumed session recalls once more on its first prompt; cheap, keep unless it gets noisy.
+	// One recall per session: skip if this branch already carries a recall block (resume/reload/fork).
+	// `recalled` also stops retrying every prompt when the first recall came back empty.
 	let recalled = false;
 	pi.on("session_start", () => {
 		recalled = false;
@@ -175,12 +177,13 @@ export default function (pi: ExtensionAPI) {
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (recalled || cfg.autoRecall === false || !event.prompt.trim()) return;
 		recalled = true;
+		if (ctx.sessionManager.getBranch().some((e) => e.type === "custom_message" && e.customType === RECALL_TYPE)) return;
 		try {
 			const results = await recall(event.prompt, ctx.cwd, false, cfg.autoRecallMaxTokens ?? 1024, ctx.signal);
 			if (!results.length) return;
 			return {
 				message: {
-					customType: "hindsight-memory",
+					customType: RECALL_TYPE,
 					display: true,
 					content:
 						`<hindsight_memories>\nMemories from earlier sessions in project "${projectName(ctx.cwd)}". ` +
