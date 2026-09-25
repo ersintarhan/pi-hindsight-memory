@@ -1,0 +1,32 @@
+{
+	"name": "@ersintarhan/pi-hindsight-memory",
+	"version": "0.1.0",
+	"description": "Minimal Hindsight memory for pi: retain/recall/reflect tools plus one project-scoped recall per session. No session export.",
+	"keywords": ["pi-package", "pi-extension", "pi", "pi-coding-agent", "hindsight", "memory"],
+	"author": "Ersin Tarhan <ersintarhan@gmail.com>",
+	"license": "MIT",
+	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ersintarhan/pi-hindsight-memory.git"
+	},
+	"files": ["index.ts", "README.md", "LICENSE"],
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"test": "bun test",
+		"check": "bun run typecheck && bun test"
+	},
+	"pi": {
+		"extensions": ["./index.ts"]
+	},
+	"peerDependencies": {
+		"@earendil-works/pi-coding-agent": "*",
+		"typebox": "*"
+	},
+	"devDependencies": {
+		"@earendil-works/pi-coding-agent": "0.87.1",
+		"@types/bun": "^1.4.0",
+		"typebox": "1.3.27",
+		"typescript": "^7.0.2"
+	}
+}
