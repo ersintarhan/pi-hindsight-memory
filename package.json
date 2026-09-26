@@ -1,6 +1,6 @@
 {
 	"name": "@ersintarhan/pi-hindsight-memory",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Minimal Hindsight memory for pi: retain/recall/reflect tools plus one project-scoped recall per session. No session export.",
 	"keywords": [
 		"pi-package",
