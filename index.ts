@@ -9,7 +9,8 @@
 
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve, sep } from "node:path";
 import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -21,6 +22,8 @@ interface Config {
 	tags?: string[];
 	/** Observation scopes; "{project}" expands to "project:<name>". */
 	observationScopes?: string[][];
+	/** Stack roots: non-git dirs holding several repos, e.g. ["~/Projects/torro"]. */
+	stacks?: string[];
 	/** Recall once on the first prompt of each session. Default true. */
 	autoRecall?: boolean;
 	/** Token cap for the auto recall. Default 1024. */
@@ -36,18 +39,38 @@ interface RecallResult {
 const CONFIG_PATH = join(getAgentDir(), "hindsight-memory.json");
 const RECALL_TYPE = "hindsight-memory";
 
-/** Git repo name (worktree-safe via common dir), else cwd basename. Matches epimetheus' project tag. */
-export function projectName(cwd: string): string {
+export interface Scope {
+	project: string;
+	stack?: string;
+}
+
+/**
+ * project = git repo name (worktree-safe via common dir), else cwd basename (matches epimetheus).
+ * stack = basename of the configured stack root containing the repo (or cwd, outside git).
+ */
+export function scopeOf(cwd: string, stacks: string[] = []): Scope {
+	let repo: string | undefined;
 	try {
 		const dir = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
 			cwd,
 			encoding: "utf8",
 			stdio: ["ignore", "pipe", "ignore"],
 		}).trim();
-		return basename(dir) === ".git" ? basename(dirname(dir)) : basename(dir).replace(/\.git$/, "");
+		repo = basename(dir) === ".git" ? dirname(dir) : dir;
 	} catch {
-		return basename(cwd);
+		// not a git repo: fall back to cwd
 	}
+	const at = resolve(repo ?? cwd);
+	const root = stacks
+		.map((s) => resolve(s.replace(/^~(?=\/|$)/, homedir())))
+		.find((s) => at === s || at.startsWith(s + sep));
+	return { project: basename(at).replace(/\.git$/, ""), ...(root ? { stack: basename(root) } : {}) };
+}
+
+/** Repo: own + stack-level memories. Stack root (planner): own + everything tagged with the stack. */
+export function recallTags({ project, stack }: Scope): string[] {
+	if (!stack) return [`project:${project}`];
+	return [`project:${project}`, stack === project ? `stack:${stack}` : `project:${stack}`];
 }
 
 export function formatResults(results: RecallResult[]): string {
@@ -87,7 +110,7 @@ export default function (pi: ExtensionAPI) {
 	}
 
 	const scopeTags = (cwd: string, allProjects?: boolean) =>
-		allProjects ? {} : { tags: [`project:${projectName(cwd)}`], tags_match: "any_strict" };
+		allProjects ? {} : { tags: recallTags(scopeOf(cwd, cfg.stacks)), tags_match: "any_strict" };
 
 	const recall = (query: string, cwd: string, allProjects: boolean | undefined, maxTokens: number, signal?: AbortSignal) =>
 		api<{ results: RecallResult[] }>(
@@ -113,7 +136,8 @@ export default function (pi: ExtensionAPI) {
 			tags: Type.Optional(Type.Array(Type.String(), { description: "Extra tags, e.g. 'topic:auth'" })),
 		}),
 		async execute(_id, p, signal, _onUpdate, ctx) {
-			const project = `project:${projectName(ctx.cwd)}`;
+			const { project: name, stack } = scopeOf(ctx.cwd, cfg.stacks);
+			const project = `project:${name}`;
 			await api(
 				"/memories",
 				{
@@ -123,7 +147,7 @@ export default function (pi: ExtensionAPI) {
 							content: p.content,
 							context: p.context,
 							timestamp: new Date().toISOString(),
-							tags: [...(cfg.tags ?? []), project, `session:${ctx.sessionManager.getSessionId()}`, "store_method:tool", ...(p.tags ?? [])],
+							tags: [...(cfg.tags ?? []), project, ...(stack ? [`stack:${stack}`] : []), `session:${ctx.sessionManager.getSessionId()}`, "store_method:tool", ...(p.tags ?? [])],
 							observation_scopes: cfg.observationScopes?.map((s) => s.map((t) => t.replaceAll("{project}", project))),
 						},
 					],
@@ -186,7 +210,7 @@ export default function (pi: ExtensionAPI) {
 					customType: RECALL_TYPE,
 					display: true,
 					content:
-						`<hindsight_memories>\nMemories from earlier sessions in project "${projectName(ctx.cwd)}". ` +
+						`<hindsight_memories>\nMemories from earlier sessions in project "${scopeOf(ctx.cwd, cfg.stacks).project}". ` +
 						`Background only; they may be outdated, verify before relying on them.\n\n${formatResults(results)}\n</hindsight_memories>`,
 				},
 			};
