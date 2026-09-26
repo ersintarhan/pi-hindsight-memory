@@ -17,12 +17,13 @@ pi install git:github.com/ersintarhan/pi-hindsight-memory
 
 ## Config
 
+Put the API key in the `HINDSIGHT_API_TOKEN` environment variable. An `apiKey` field in the config file overrides it.
+
 Create `~/.pi/agent/hindsight-memory.json`:
 
 ```json
 {
   "apiUrl": "https://your-hindsight",
-  "apiKey": "...",
   "bankId": "default",
   "tags": ["harness:pi", "user:me"],
   "observationScopes": [["user:me"], ["{project}"]],

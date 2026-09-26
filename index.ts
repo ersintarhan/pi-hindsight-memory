@@ -16,6 +16,7 @@ import { Type } from "typebox";
 
 interface Config {
 	apiUrl: string;
+	/** Prefer the HINDSIGHT_API_TOKEN env var; this field overrides it. */
 	apiKey?: string;
 	bankId: string;
 	/** Added to every retained memory, e.g. ["harness:pi", "user:ersin"]. */
@@ -96,12 +97,13 @@ export default function (pi: ExtensionAPI) {
 		return;
 	}
 	const cfg = loaded;
+	const apiKey = cfg.apiKey ?? process.env.HINDSIGHT_API_TOKEN;
 
 	async function api<T>(path: string, body: unknown, signal?: AbortSignal, timeoutMs = 30_000): Promise<T> {
 		const timeout = AbortSignal.timeout(timeoutMs);
 		const res = await fetch(`${cfg.apiUrl.replace(/\/$/, "")}/v1/default/banks/${encodeURIComponent(cfg.bankId)}${path}`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json", ...(cfg.apiKey ? { Authorization: `Bearer ${cfg.apiKey}` } : {}) },
+			headers: { "Content-Type": "application/json", ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}) },
 			body: JSON.stringify(body),
 			signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
 		});
