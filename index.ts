@@ -201,11 +201,13 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
-		if (recalled || cfg.autoRecall === false || !event.prompt.trim()) return;
+		// Custom-triggered runs (pi.sendMessage with triggerTurn) have no prompt.
+		const prompt = "prompt" in event ? event.prompt : "";
+		if (recalled || cfg.autoRecall === false || !prompt.trim()) return;
 		recalled = true;
 		if (ctx.sessionManager.getBranch().some((e) => e.type === "custom_message" && e.customType === RECALL_TYPE)) return;
 		try {
-			const results = await recall(event.prompt, ctx.cwd, false, cfg.autoRecallMaxTokens ?? 1024, ctx.signal);
+			const results = await recall(prompt, ctx.cwd, false, cfg.autoRecallMaxTokens ?? 1024, ctx.signal);
 			if (!results.length) return;
 			return {
 				message: {
